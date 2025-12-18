@@ -8,10 +8,10 @@ from models.kb import KB_INDEX, KB_DOC_INDEX, KB_DOC_EMBED_INDEX
 
 def _ensure_indices(client: Elasticsearch) -> None:
     """
-    确保知识库相关索引已创建。
-    使用较宽松的 mapping，适合入门场景。
+    make sure kb index is created.
+    use loose mapping, suitable for beginner scenarios.
     """
-    # 知识库索引
+    # kb index
     if not client.indices.exists(index=KB_INDEX):
         client.indices.create(
             index=KB_INDEX,
@@ -26,7 +26,7 @@ def _ensure_indices(client: Elasticsearch) -> None:
             },
         )
 
-    # 文档索引
+    # doc index
     if not client.indices.exists(index=KB_DOC_INDEX):
         client.indices.create(
             index=KB_DOC_INDEX,
@@ -42,7 +42,7 @@ def _ensure_indices(client: Elasticsearch) -> None:
             },
         )
 
-    # 向量索引（简单存 embedding 数组，向量检索逻辑在 Python 里自己算相似度）
+    # vector index (simple save embedding array, vector retrieval logic is calculated by yourself in Python)
     if not client.indices.exists(index=KB_DOC_EMBED_INDEX):
         client.indices.create(
             index=KB_DOC_EMBED_INDEX,
@@ -59,7 +59,7 @@ def _ensure_indices(client: Elasticsearch) -> None:
         )
 
 
-# ==== 知识库 ====
+# ==== kb ====
 
 
 def create_kb(doc: Dict[str, Any]) -> None:
@@ -71,7 +71,7 @@ def create_kb(doc: Dict[str, Any]) -> None:
 def update_kb(uuid: str, fields: Dict[str, Any]) -> None:
     client = get_es_client()
     _ensure_indices(client)
-    # 查到 _id 再更新
+    # get _id and then update
     res = client.search(index=KB_INDEX, query={"term": {"uuid": uuid}})
     hits = res.get("hits", {}).get("hits", [])
     if not hits:
@@ -83,13 +83,13 @@ def update_kb(uuid: str, fields: Dict[str, Any]) -> None:
 def delete_kb(uuid: str) -> None:
     client = get_es_client()
     _ensure_indices(client)
-    # 删除知识库本身
+    # delete kb itself
     res = client.search(index=KB_INDEX, query={"term": {"uuid": uuid}})
     hits = res.get("hits", {}).get("hits", [])
     for hit in hits:
         client.delete(index=KB_INDEX, id=hit["_id"])
 
-    # 级联删除文档及向量
+    # cascade delete doc and vector
     client.delete_by_query(index=KB_DOC_INDEX, body={"query": {"term": {"kb_uuid": uuid}}})
     client.delete_by_query(index=KB_DOC_EMBED_INDEX, body={"query": {"term": {"kb_uuid": uuid}}})
 
@@ -119,7 +119,7 @@ def get_kb(uuid: str) -> Optional[Dict[str, Any]]:
     return hits[0]["_source"]
 
 
-# ==== 文档 ====
+# ==== doc ====
 
 
 def create_doc(doc: Dict[str, Any]) -> None:
@@ -142,13 +142,13 @@ def update_doc(uuid: str, fields: Dict[str, Any]) -> None:
 def delete_doc(uuid: str) -> None:
     client = get_es_client()
     _ensure_indices(client)
-    # 删除文档
+    # delete doc
     res = client.search(index=KB_DOC_INDEX, query={"term": {"uuid": uuid}})
     hits = res.get("hits", {}).get("hits", [])
     for hit in hits:
         client.delete(index=KB_DOC_INDEX, id=hit["_id"])
 
-    # 删除对应向量
+    # delete corresponding vector
     client.delete_by_query(
         index=KB_DOC_EMBED_INDEX,
         body={"query": {"term": {"doc_uuid": uuid}}},
@@ -180,20 +180,20 @@ def get_doc(uuid: str) -> Optional[Dict[str, Any]]:
     return hits[0]["_source"]
 
 
-# ==== 向量 ====
+# ==== vector ====
 
 
 def upsert_doc_embeddings(
     kb_uuid: str, doc_uuid: str, chunks_with_embeddings: List[Dict[str, Any]]
 ) -> None:
     """
-    为文档写入/更新向量信息：
-    - 先删掉原有 doc_uuid 对应的向量
-    - 再批量写入新的
+    write/update vector information for doc:
+    - delete the existing vector corresponding to doc_uuid
+    - then batch write new ones
     """
     client = get_es_client()
     _ensure_indices(client)
-    # 删除旧的
+    # delete old
     client.delete_by_query(
         index=KB_DOC_EMBED_INDEX,
         body={"query": {"term": {"doc_uuid": doc_uuid}}},
@@ -213,7 +213,7 @@ def upsert_doc_embeddings(
 
 def list_doc_embeddings(kb_uuid: str) -> List[Dict[str, Any]]:
     """
-    获取某个知识库下的所有文档向量（简单实现：一次性拉取，适合小数据量）。
+    get all doc vectors under a kb (simple implementation: fetch all at once, suitable for small data量）。
     """
     client = get_es_client()
     _ensure_indices(client)

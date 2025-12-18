@@ -6,7 +6,7 @@ _es_client: Optional[Elasticsearch] = None
 
 
 def get_es_client() -> Elasticsearch:
-    """获取 Elasticsearch 客户端（单例模式）"""
+    """get Elasticsearch client (singleton pattern)"""
     global _es_client
     if _es_client is None:
         _es_client = Elasticsearch([ELASTICSEARCH_URL])

@@ -44,7 +44,7 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-# ==== 知识库 ====
+# ==== kb ====
 
 
 def create_kb_service(req: KnowledgeBaseCreate) -> KnowledgeBase:
@@ -90,7 +90,7 @@ def list_kb_service(page: int, size: int) -> Dict[str, Any]:
     return list_kb(page, size)
 
 
-# ==== 文档 ====
+# ==== doc ====
 
 
 def create_doc_service(
@@ -109,7 +109,7 @@ def create_doc_service(
     )
     create_doc(doc.dict())
 
-    # 生成嵌入并写入
+    # generate embedding and write into
     _generate_and_store_embeddings_for_doc(doc)
 
     return doc
@@ -135,7 +135,7 @@ def update_doc_service(
     doc_data.update(fields)
     doc = KnowledgeDocument(**doc_data)
 
-    # 如果内容有变动，重新生成嵌入
+    # if content has changed, regenerate embedding
     if req.content is not None:
         _generate_and_store_embeddings_for_doc(doc)
 
@@ -156,8 +156,8 @@ def list_docs_service(kb_uuid: str, page: int, size: int) -> Dict[str, Any]:
 
 def _chunk_text(content: str, max_chars: int = 400) -> List[str]:
     """
-    目前知识库主要用于 ES 检索，不再喂给 OpenAI。
-    这里保留一个简单的切分函数，方便未来按需扩展。
+    currently kb is mainly used for ES query, not fed to OpenAI.
+    keep a simple chunking function for future extension.
     """
     content = content.strip()
     if not content:
@@ -175,7 +175,7 @@ def qa_service(kb_uuid: str, question: str, top_k: int = 3) -> Optional[Knowledg
     if not get_kb(kb_uuid):
         return None
 
-    # 不再使用知识库内容喂给 OpenAI，只做普通问答
+    # no longer use kb content to feed to OpenAI, only do normal qa
     messages = [
         {
             "role": "user",
@@ -184,16 +184,16 @@ def qa_service(kb_uuid: str, question: str, top_k: int = 3) -> Optional[Knowledg
     ]
     answer = chat_completion(messages)
 
-    # 把本次 Q&A 记入知识库，并为回答生成向量
+    # write current Q&A into kb, and generate vector for the answer
     save_qa_to_kb(kb_uuid, question, answer)
 
-    # context 为空，表示没有把知识库内容喂给模型
+    # context is empty, means no kb content was fed to the model
     return KnowledgeQAReply(answer=answer, context=[])
 
 
 def save_qa_to_kb(kb_uuid: str, question: str, answer: str) -> None:
     """
-    将一轮 Q&A 写入知识库，并为回答生成 embedding 存入向量索引。
+    write current Q&A into kb, and generate vector for the answer
     """
     doc = KnowledgeDocument(
         uuid=str(uuid.uuid4()),
@@ -205,7 +205,7 @@ def save_qa_to_kb(kb_uuid: str, question: str, answer: str) -> None:
     )
     create_doc(doc.dict())
 
-    # 只为回答文本生成 embedding
+    # only generate embedding for the answer text
     embedding = create_embeddings(answer)
     upsert_doc_embeddings(
         kb_uuid,
@@ -223,10 +223,10 @@ def save_qa_to_kb(kb_uuid: str, question: str, answer: str) -> None:
 
 def semantic_search_service(kb_uuid: str, query: str, top_k: int = 5) -> Optional[List[Dict[str, Any]]]:
     """
-    对指定知识库做向量语义检索：
-    - 为 query 生成 embedding
-    - 从 kb_doc_embed_index 拉取该库下所有向量
-    - 计算余弦相似度，返回 top_k 的 chunk + score
+    do vector semantic search for the specified kb:
+    - generate embedding for the query
+    - fetch all vectors under the kb from kb_doc_embed_index
+    - calculate cosine similarity, return top_k chunks + scores
     """
     if not get_kb(kb_uuid):
         return None

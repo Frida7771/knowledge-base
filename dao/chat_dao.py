@@ -7,7 +7,7 @@ from models.chat import CHAT_INDEX, CHAT_MESSAGE_INDEX
 
 
 def _ensure_indices(client: Elasticsearch) -> None:
-    """确保 Chat 相关索引存在。"""
+    """ensure Chat related indices exist"""
     if not client.indices.exists(index=CHAT_INDEX):
         client.indices.create(
             index=CHAT_INDEX,
@@ -87,7 +87,7 @@ def delete_chat(uuid: str) -> None:
     hits = res.get("hits", {}).get("hits", [])
     for hit in hits:
         client.delete(index=CHAT_INDEX, id=hit["_id"])
-    # 同时删除消息
+    # delete messages
     client.delete_by_query(
         index=CHAT_MESSAGE_INDEX,
         body={"query": {"term": {"chat_uuid": uuid}}},
@@ -111,5 +111,7 @@ def list_messages(chat_uuid: str, limit: int = 50) -> List[Dict[str, Any]]:
     )
     hits = res.get("hits", {}).get("hits", [])
     return [hit["_source"] for hit in hits]
+
+
 
 

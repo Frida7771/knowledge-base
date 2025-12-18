@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class UserBasicDao(BaseModel):
-    """用户基础数据模型"""
+    """user basic data model"""
     uuid: str
     username: str
     password: str

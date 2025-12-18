@@ -13,15 +13,15 @@ from service.admin.user import create_service as admin_create_service
 
 def _verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    校验密码（支持新老两种存储方式）：
-    - 新：bcrypt 哈希
-    - 旧：明文（兼容之前已有数据）
+    verify password (support both new and old storage methods):
+    - new: bcrypt hash
+    - old: plain text (compatible with existing data)
     """
-    # 旧数据：明文存储，直接比对
+    # old data: plain text storage, directly compare
     if not hashed_password.startswith("$2b$") and not hashed_password.startswith("$2a$"):
         return plain_password == hashed_password
 
-    # 新数据：bcrypt 哈希
+    # new data: bcrypt hash
     try:
         return bcrypt.checkpw(
             plain_password.encode("utf-8"), hashed_password.encode("utf-8")
@@ -32,31 +32,31 @@ def _verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def login_service(username: str, password: str) -> tuple[Optional[str], Optional[str]]:
     """
-    登录服务
-    返回: (token, error_message)
+    login service
+    return: (token, error_message)
     """
-    # 1. 获取用户信息
+    # 1. get user info
     response = search_user_by_username(username)
     
     hits = response.get("hits", {}).get("hits", [])
     if not hits:
-        return None, "用户名不存在"
+        return None, "username not found"
     
-    # 2. 解析用户数据
+    # 2. parse user data
     user_source = hits[0]["_source"]
     user_basic = UserBasicDao(**user_source)
     
-    # 3. 校验密码（支持哈希）
+    # 3. verify password (support both new and old storage methods)
     if not _verify_password(password, user_basic.password):
-        return None, "密码不正确"
+        return None, "password is incorrect"
     
-    # 4. 生成 token
+    # 4. generate token
     exp = datetime.utcnow() + timedelta(days=1)
     claim = {
         "uuid": user_basic.uuid,
         "username": user_basic.username,
         "email": user_basic.email,
-        "exp": int(exp.timestamp())  # PyJWT 使用秒，不是毫秒
+        "exp": int(exp.timestamp())  # PyJWT uses seconds, not milliseconds
     }
     token = jwt.encode(claim, JWT_SECRET, algorithm="HS256")
     
@@ -67,41 +67,41 @@ def register_service(
     username: str, password: str, email: Optional[str]
 ) -> tuple[bool, Optional[str]]:
     """
-    普通用户注册，复用管理员创建逻辑（包含用户名唯一校验与密码哈希）。
+    ordinary user registration, reuse admin create logic (contains username uniqueness verification and password hash)
     """
     return admin_create_service(username, password, email)
 
 
 def password_modify_service(user_uuid: str, username: str, old_password: str, new_password: str) -> tuple[bool, Optional[str]]:
     """
-    修改密码服务
+    modify password service
     返回: (success, error_message)
     """
-    # 1. 获取用户信息
+    # 1. get user info
     response = search_user_by_username(username)
     
     hits = response.get("hits", {}).get("hits", [])
     if not hits:
-        return False, "用户名不存在"
+        return False, "username not found"
     
     user_id = hits[0]["_id"]
     user_source = hits[0]["_source"]
     user_basic = UserBasicDao(**user_source)
     
-    # 2. 校验用户 UUID
+    # 2. verify user UUID
     if user_basic.uuid != user_uuid:
-        return False, "用户信息不匹配"
+        return False, "user info mismatch"
     
-    # 3. 校验旧密码（支持哈希）
+    # 3. verify old password (support both new and old storage methods)
     if not _verify_password(old_password, user_basic.password):
-        return False, "旧密码不正确"
+        return False, "old password is incorrect"
     
-    # 4. 更新密码
+    # 4. update password
     from datetime import datetime
     update_user(
         user_id,
         {
-            # 新密码一律以哈希存储
+            # new password一律以哈希存储
             "password": bcrypt.hashpw(
                 new_password.encode("utf-8"), bcrypt.gensalt()
             ).decode("utf-8"),

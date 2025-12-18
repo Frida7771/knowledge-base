@@ -9,7 +9,7 @@ security = HTTPBearer()
 
 
 class UserClaim(BaseModel):
-    """用户声明"""
+    """user claim"""
     uuid: str
     username: str
     email: Optional[str] = None
@@ -18,7 +18,7 @@ class UserClaim(BaseModel):
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> UserClaim:
     """
-    获取当前用户（JWT 认证中间件）
+    get current user (JWT authentication middleware)
     """
     token = credentials.credentials
     
@@ -29,7 +29,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 401, "msg": "token 已过期"}
+            detail={"code": 401, "msg": "token expired"}
         )
     except jwt.InvalidTokenError:
         raise HTTPException(
@@ -39,6 +39,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": 401, "msg": f"token 验证失败: {str(e)}"}
+            detail={"code": 401, "msg": f"token verification failed: {str(e)}"}
         )
 

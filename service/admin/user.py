@@ -16,7 +16,7 @@ from models.user_basic import UserBasicDao
 
 def _hash_password(plain_password: str) -> str:
     """
-    使用 bcrypt 对密码进行哈希
+    hash password using bcrypt
     """
     return bcrypt.hashpw(plain_password.encode("utf-8"), bcrypt.gensalt()).decode(
         "utf-8"
@@ -25,16 +25,16 @@ def _hash_password(plain_password: str) -> str:
 
 def create_service(username: str, password: str, email: Optional[str] = None) -> tuple[bool, Optional[str]]:
     """
-    创建用户服务
+    create user service
     返回: (success, error_message)
     """
-    # 1. 检查用户名是否存在
+    # 1. check if username exists
     response = search_user_by_username(username)
     total = response.get("hits", {}).get("total", {}).get("value", 0)
     if total > 0:
-        return False, "用户名已存在"
+        return False, "username already exists"
     
-    # 2. 创建用户（密码哈希存储）
+    # 2. create user (hash password)
     now = int(datetime.utcnow().timestamp() * 1000)
     user = UserBasicDao(
         uuid=str(uuid.uuid4()),
@@ -51,19 +51,19 @@ def create_service(username: str, password: str, email: Optional[str] = None) ->
 
 def reset_password_service(user_uuid: str, password: str) -> tuple[bool, Optional[str]]:
     """
-    重置密码服务
-    返回: (success, error_message)
+    reset password service
+    return: (success, error_message)
     """
-    # 1. 获取用户信息
+    # 1. get user info
     response = search_user_by_uuid(user_uuid)
     
     hits = response.get("hits", {}).get("hits", [])
     if not hits:
-        return False, "获取用户信息失败"
+        return False, "get user info failed"
     
     user_id = hits[0]["_id"]
     
-    # 2. 更新密码（密码哈希存储）
+    # 2. update password (hash password)
     update_user(user_id, {
         "password": _hash_password(password),
         "update_at": int(datetime.utcnow().timestamp() * 1000)
@@ -74,8 +74,8 @@ def reset_password_service(user_uuid: str, password: str) -> tuple[bool, Optiona
 
 def list_service(page: int, size: int) -> tuple[Optional[dict], Optional[str]]:
     """
-    获取用户列表服务
-    返回: (result, error_message)
+    get user list service
+    return: (result, error_message)
     """
     try:
         response = list_users(page, size)

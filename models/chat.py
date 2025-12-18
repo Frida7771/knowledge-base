@@ -4,18 +4,18 @@ from pydantic import BaseModel
 
 
 class Chat(BaseModel):
-    """对话会话"""
+    """chat session"""
 
     uuid: str
-    kb_uuid: Optional[str] = None  # 绑定的知识库，可空（纯 LLM 聊天）
+    kb_uuid: Optional[str] = None  # bound kb, can be empty (pure LLM chat)
     title: str
-    user_uuid: str  # 发起人
+    user_uuid: str  # initiator
     create_at: int
     update_at: int
 
 
 class ChatCreate(BaseModel):
-    """创建对话"""
+    """create chat"""
 
     kb_uuid: Optional[str] = None
     title: Optional[str] = None
@@ -23,7 +23,7 @@ class ChatCreate(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    """单条消息"""
+    """single message"""
 
     uuid: str
     chat_uuid: str
@@ -33,13 +33,13 @@ class ChatMessage(BaseModel):
 
 
 class ChatMessageCreate(BaseModel):
-    """用户发送消息"""
+    """user send message"""
 
     content: str
 
 
 class ChatReply(BaseModel):
-    """模型回复 + 上下文"""
+    """model reply + context"""
 
     answer: str
     context: List[str]

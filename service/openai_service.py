@@ -6,7 +6,7 @@ _client: Optional[OpenAI] = None
 
 
 def get_openai_client() -> OpenAI:
-    """获取 OpenAI 客户端（单例模式）"""
+    """get OpenAI client (singleton pattern)"""
     global _client
     if _client is None:
         if not OPENAI_API_KEY:
@@ -15,16 +15,16 @@ def get_openai_client() -> OpenAI:
     return _client
 
 
-def chat_completion(messages: List[Dict[str, str]], model: str = "gpt-3.5-turbo") -> str:
+def chat_completion(messages: List[Dict[str, str]], model: str = "gpt-4o") -> str:
     """
-    OpenAI 聊天完成接口
+    OpenAI chat completion interface
     
     Args:
-        messages: 消息列表，格式为 [{"role": "user", "content": "..."}]
-        model: 使用的模型，默认为 gpt-3.5-turbo
+        messages: message list, format: [{"role": "user", "content": "..."}]
+        model: the model to use, default is gpt-4o
     
     Returns:
-        模型返回的文本内容
+        the text content returned by the model
     """
     client = get_openai_client()
     response = client.chat.completions.create(
@@ -36,14 +36,14 @@ def chat_completion(messages: List[Dict[str, str]], model: str = "gpt-3.5-turbo"
 
 def create_embeddings(text: str, model: str = "text-embedding-ada-002") -> List[float]:
     """
-    创建文本嵌入向量
+    create text embedding vector
     
     Args:
-        text: 要嵌入的文本
-        model: 使用的嵌入模型，默认为 text-embedding-ada-002
+        text: the text to embed
+        model: the embedding model to use, default is text-embedding-ada-002
     
     Returns:
-        嵌入向量列表
+        the list of embedding vectors
     """
     client = get_openai_client()
     response = client.embeddings.create(

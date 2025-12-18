@@ -7,48 +7,48 @@ router = APIRouter()
 
 
 class UserLoginRequest(BaseModel):
-    """用户登录请求"""
+    """user login request"""
     username: str
     password: str
 
 
 class PasswordModifyRequest(BaseModel):
-    """修改密码请求"""
+    """password modify request"""
     old_password: str
     new_password: str
 
 
 class UserRegisterRequest(BaseModel):
-    """用户注册请求"""
+    """user register request"""
     username: str
     password: str
     email: str | None = None
 
 
-@router.post("/login", tags=["用户模块"])
+@router.post("/login", tags=["user"])
 async def login(req: UserLoginRequest):
-    """用户登录"""
+    """user login"""
     token, error = login_service(req.username, req.password)
     if error:
         return {"code": -1, "msg": error}
     return {"code": 200, "data": {"token": token}}
 
 
-@router.post("/register", tags=["用户模块"])
+@router.post("/register", tags=["user"])
 async def register(req: UserRegisterRequest):
-    """用户注册"""
+    """user register"""
     success, error = register_service(req.username, req.password, req.email)
     if error or not success:
-        return {"code": -1, "msg": error or "注册失败"}
-    return {"code": 200, "msg": "注册成功"}
+        return {"code": -1, "msg": error or "register failed"}
+    return {"code": 200, "msg": "register success"}
 
 
-@router.post("/password/modify", tags=["用户模块"])
+@router.post("/password/modify", tags=["user"])
 async def password_modify(
     req: PasswordModifyRequest,
     current_user: UserClaim = Depends(get_current_user)
 ):
-    """修改密码"""
+    """password modify"""
     success, error = password_modify_service(
         current_user.uuid,
         current_user.username,
@@ -57,5 +57,5 @@ async def password_modify(
     )
     if error:
         return {"code": -1, "msg": error}
-    return {"code": 200, "msg": "修改成功"}
+    return {"code": 200, "msg": "modify success"}
 

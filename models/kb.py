@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class KnowledgeBase(BaseModel):
-    """知识库实体"""
+    """kb entity"""
 
     uuid: str
     name: str
@@ -14,21 +14,21 @@ class KnowledgeBase(BaseModel):
 
 
 class KnowledgeBaseCreate(BaseModel):
-    """创建知识库请求"""
+    """create kb request"""
 
     name: str
     description: Optional[str] = None
 
 
 class KnowledgeBaseUpdate(BaseModel):
-    """更新知识库请求"""
+    """update kb request"""
 
     name: Optional[str] = None
     description: Optional[str] = None
 
 
 class KnowledgeDocument(BaseModel):
-    """知识库文档"""
+    """kb document"""
 
     uuid: str
     kb_uuid: str
@@ -39,28 +39,28 @@ class KnowledgeDocument(BaseModel):
 
 
 class KnowledgeDocumentCreate(BaseModel):
-    """创建/导入文档请求"""
+    """create/import doc request"""
 
     title: str
     content: str
 
 
 class KnowledgeDocumentUpdate(BaseModel):
-    """更新文档请求"""
+    """update doc request"""
 
     title: Optional[str] = None
     content: Optional[str] = None
 
 
 class KnowledgeQARequest(BaseModel):
-    """知识库问答请求"""
+    """kb qa request"""
 
     question: str
     top_k: int = 3
 
 
 class KnowledgeQAReply(BaseModel):
-    """知识库问答响应"""
+    """kb qa response"""
 
     answer: str
     context: List[str]
