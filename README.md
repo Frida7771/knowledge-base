@@ -84,23 +84,4 @@ npm run dev                      # http://127.0.0.1:5173
 
 ---
 
-## Development Notes
-
-- Embedding dimension defaults to 1536 (compatible with OpenAI `text-embedding-3-large` / `text-embedding-ada-002`). Update ES mapping if you change models.
-- Semantic search is still used internally by Chat/QA. The standalone Search page is keyword-only by design.
-- `_generate_and_store_embeddings_for_doc` centralizes chunking + vector upserts—reuse it when importing or programmatically inserting content.
-- Elasticsearch indices are created lazily; delete them via Kibana DevTools to reset state.
-- Exports are Zip files containing `kb.json`, `docs.json`, `embeddings.json`, making manual backups trivial.
-- Document ingestion currently accepts markdown/txt, CSV, DOCX, PPTX, and PDF files; extend `_extract_docs_from_upload` for more formats.
-
----
-
-## Roadmap Ideas
-
-- Advanced analyzers (synonyms, custom token filters) for keyword search.
-- Autocomplete & “search-as-you-type” suggestions.
-- Tagging/metadata filters for KB documents.
-- Role-based permissions & audit logs.
-- Import pipelines for Markdown, CSV, or PDF (with automatic embedding).
-
 Enjoy shipping with AtlasKB! Contributions and ideas are always welcome.
