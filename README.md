@@ -14,10 +14,9 @@ The repository contains both the **FastAPI backend** (auth, KB CRUD, chat/QA wor
 | Document ingestion | Upload markdown/txt, CSV, DOCX, PPTX, or PDF files to auto-create KB docs (embeddings generated on import). |
 | Document store | Chat/QA turns automatically become `Q:` / `A:` documents, chunked and embedded into ES (`kb_index`, `kb_doc_index`, `kb_doc_embed_index`). |
 | Chat workspace | Multi-turn chat with KB binding, rename chats, clear conversation, view referenced snippets, switch between chats. |
-| QA API | `POST /api/v1/kb/{kb_uuid}/qa` retrieves vector-similar chunks and asks OpenAI for an answer, writing results back to the KB. |
+| QA API | retrieves vector-similar chunks and asks OpenAI for an answer, writing results back to the KB. |
 | Keyword search | Dedicated UI + API using ES `multi_match` with highlighting—no OpenAI call, perfect for deterministic audits. |
 | Auth | JWT login/registration, email-or-username login, bcrypt hashing, precise error handling. |
-| UX polish | Fixed-height layouts, internal scrolling, disabled states, English hints, button resizing, right-aligned actions. |
 
 ---
 
@@ -71,15 +70,6 @@ npm install
 cp .env.example .env             # configure VITE_API_BASE if needed
 npm run dev                      # http://127.0.0.1:5173
 ```
-
-
-## Frontend Highlights
-
-- **Auth-first shell** ensures chat/search/KB tabs only render after login.
-- **Chat tab**: conversation list with rename/delete, KB UUID input, tip box, referenced-snippet rendering, streaming typing effect, fixed-height layout with inner scroll.
-- **Search tab**: single keyword mode, descriptive hints, highlighted results rendered via `dangerouslySetInnerHTML`.
-- **Knowledge bases tab**: asymmetric grid (narrow create form + wide list), pagination (5 per page), “Use & copy”, “Export”, “Delete” buttons aligned to the right, immediate refresh after actions.
-
 ---
 
 ## Demo
