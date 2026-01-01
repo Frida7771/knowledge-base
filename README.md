@@ -1,4 +1,4 @@
-## AtlasKB – Searchable Knowledge Operating System
+## AtlasKB
 
 AtlasKB is a full-stack knowledge management platform that lets teams ingest notes, search them in Elasticsearch, and chat with an OpenAI-powered assistant that cites the knowledge base.
 

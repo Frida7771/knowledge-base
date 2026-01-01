@@ -74,7 +74,7 @@ function App() {
           width: "100%",
         }}
       >
-        <div style={{ fontSize: 20, fontWeight: 600 }}>Knowledge Base Studio</div>
+        <div style={{ fontSize: 20, fontWeight: 600 }}>AtlasKB Studio</div>
         <div style={{ display: "flex", gap: 8 }}>
           <button
             style={{
@@ -143,7 +143,7 @@ function App() {
               }
             }}
           >
-            Knowledge Bases
+            AtlasKB
           </button>
         </div>
         <button

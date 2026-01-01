@@ -104,7 +104,7 @@ const LoginPage = ({ onSuccess }: Props) => {
     <div style={styles.page}>
       <div style={styles.container}>
         <div style={styles.hero}>
-          <h1 style={styles.heroTitle}>Knowledge Base Studio</h1>
+          <h1 style={styles.heroTitle}>AtlasKB Studio</h1>
           <p style={styles.heroDesc}>
             Converse with AI, capture every answer, and build a private knowledge
             brain you can search anytime.
