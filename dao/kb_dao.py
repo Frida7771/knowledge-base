@@ -42,7 +42,7 @@ def _ensure_indices(client: Elasticsearch) -> None:
             },
         )
 
-    # vector index (simple save embedding array, vector retrieval logic is calculated by yourself in Python)
+    # vector index (store embeddings for server-side similarity)
     if not client.indices.exists(index=KB_DOC_EMBED_INDEX):
         client.indices.create(
             index=KB_DOC_EMBED_INDEX,
@@ -52,7 +52,10 @@ def _ensure_indices(client: Elasticsearch) -> None:
                     "kb_uuid": {"type": "keyword"},
                     "doc_uuid": {"type": "keyword"},
                     "chunk": {"type": "text"},
-                    "embedding": {"type": "dense_vector", "dims": 1536},
+                    "embedding": {
+                        "type": "dense_vector",
+                        "dims": 1536,
+                    },
                     "create_at": {"type": "long"},
                 }
             },
@@ -224,5 +227,39 @@ def list_doc_embeddings(kb_uuid: str) -> List[Dict[str, Any]]:
     )
     hits = res.get("hits", {}).get("hits", [])
     return [hit["_source"] for hit in hits]
+
+
+def search_doc_embeddings_by_vector(
+    kb_uuid: str,
+    query_vector: List[float],
+    top_k: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Server-side vector similarity search using script_score cosine similarity.
+    Returns top_k chunks with their scores.
+    """
+    client = get_es_client()
+    _ensure_indices(client)
+    response = client.search(
+        index=KB_DOC_EMBED_INDEX,
+        size=top_k,
+        query={
+            "script_score": {
+                "query": {"term": {"kb_uuid": kb_uuid}},
+                "script": {
+                    "source": "cosineSimilarity(params.query_vector, 'embedding') + 1.0",
+                    "params": {"query_vector": query_vector},
+                },
+            }
+        },
+    )
+    hits = response.get("hits", {}).get("hits", [])
+    results: List[Dict[str, Any]] = []
+    for hit in hits:
+        source = hit.get("_source", {})
+        score = hit.get("_score", 0.0) - 1.0  # remove +1 offset
+        source["score"] = score
+        results.append(source)
+    return results
 
 

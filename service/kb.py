@@ -16,6 +16,7 @@ from dao.kb_dao import (
     get_doc,
     upsert_doc_embeddings,
     list_doc_embeddings,
+    search_doc_embeddings_by_vector,
 )
 from models.kb import (
     KnowledgeBase,
@@ -175,20 +176,15 @@ def qa_service(kb_uuid: str, question: str, top_k: int = 3) -> Optional[Knowledg
     if not get_kb(kb_uuid):
         return None
 
-    # no longer use kb content to feed to OpenAI, only do normal qa
-    messages = [
-        {
-            "role": "user",
-            "content": question,
-        }
-    ]
+    context_chunks = _retrieve_context_chunks(kb_uuid, question, top_k)
+    messages = _build_messages_with_context(question, context_chunks)
     answer = chat_completion(messages)
 
     # write current Q&A into kb, and generate vector for the answer
     save_qa_to_kb(kb_uuid, question, answer)
 
-    # context is empty, means no kb content was fed to the model
-    return KnowledgeQAReply(answer=answer, context=[])
+    context_texts = [item["chunk"] for item in context_chunks]
+    return KnowledgeQAReply(answer=answer, context=context_texts)
 
 
 def save_qa_to_kb(kb_uuid: str, question: str, answer: str) -> None:
@@ -231,12 +227,108 @@ def semantic_search_service(kb_uuid: str, query: str, top_k: int = 5) -> Optiona
     if not get_kb(kb_uuid):
         return None
 
-    q_emb = create_embeddings(query)
-    vectors = list_doc_embeddings(kb_uuid)
+    query_vector = create_embeddings(query)
+    results: List[Dict[str, Any]] = []
+    try:
+        results = search_doc_embeddings_by_vector(kb_uuid, query_vector, top_k)
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"[WARN] ES vector search failed, falling back to local scoring: {exc}")
+        vectors = list_doc_embeddings(kb_uuid)
+        results = _score_vectors_locally(
+            vectors,
+            query_vector,
+            top_k=top_k,
+            score_threshold=0.0,
+        )
+
+    formatted: List[Dict[str, Any]] = []
+    for item in results[:top_k]:
+        formatted.append(
+            {
+                "kb_uuid": item.get("kb_uuid"),
+                "doc_uuid": item.get("doc_uuid"),
+                "chunk": item.get("chunk", ""),
+                "score": item.get("score", 0.0),
+            }
+        )
+    return formatted
+
+
+def _retrieve_context_chunks(
+    kb_uuid: str,
+    question: str,
+    top_k: int = 3,
+    score_threshold: float = 0.2,
+) -> List[Dict[str, Any]]:
+    """
+    Retrieve top_k most relevant chunks from KB embeddings.
+    Falls back gracefully if no embeddings exist or ES vector search fails.
+    """
+    query_vector = create_embeddings(question)
+    scored: List[Dict[str, Any]] = []
+
+    try:
+        scored = [
+            item
+            for item in search_doc_embeddings_by_vector(
+                kb_uuid,
+                query_vector,
+                top_k=max(top_k, 5),
+            )
+            if item.get("score", 0.0) >= score_threshold
+        ]
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"[WARN] ES vector search failed, fallback to local scoring: {exc}")
+        vectors = list_doc_embeddings(kb_uuid)
+        scored = _score_vectors_locally(
+            vectors,
+            query_vector,
+            top_k=max(top_k, 5),
+            score_threshold=score_threshold,
+        )
+
+    return scored[:top_k]
+
+
+def _build_messages_with_context(
+    question: str, context_chunks: List[Dict[str, Any]]
+) -> List[Dict[str, str]]:
+    """
+    Construct system/user messages. Encourage the model to use KB context when available.
+    """
+    base_instruction = (
+        "You are a helpful assistant. Use the provided knowledge base snippets when they are relevant. "
+        "If the context does not contain sufficient information, clearly state that you are not sure "
+        "instead of fabricating details."
+    )
+
+    messages: List[Dict[str, str]] = [{"role": "system", "content": base_instruction}]
+
+    if context_chunks:
+        context_text = "\n\n".join(
+            f"[Score {item['score']:.2f}] {item['chunk']}" for item in context_chunks
+        )
+        messages.append({"role": "system", "content": f"Knowledge base context:\n{context_text}"})
+
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
+def _score_vectors_locally(
+    vectors: List[Dict[str, Any]],
+    query_vector: List[float],
+    top_k: int,
+    score_threshold: float,
+) -> List[Dict[str, Any]]:
+    """Fallback cosine scoring executed in Python."""
     scored: List[Dict[str, Any]] = []
     for item in vectors:
         emb = item.get("embedding") or []
-        score = _cosine_similarity(q_emb, emb)
+        if not emb:
+            continue
+        score = _cosine_similarity(query_vector, emb)
+        if score < score_threshold:
+            continue
         scored.append(
             {
                 "kb_uuid": item.get("kb_uuid"),
