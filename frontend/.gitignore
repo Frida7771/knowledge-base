@@ -5,3 +5,4 @@ dist
 *.log
 .env.development
 .env.production
+.DS_Store

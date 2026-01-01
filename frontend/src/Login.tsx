@@ -104,9 +104,21 @@ const LoginPage = ({ onSuccess }: Props) => {
     <div style={styles.page}>
       <div style={styles.container}>
         <div style={styles.hero}>
+          <div style={styles.heroBackdrop} aria-hidden="true" />
+          <div style={styles.heroBrand}>
+            <img
+              src="/icon.png"
+              alt="AtlasKB logo"
+              style={styles.heroLogo}
+            />
+            <div>
+              <p style={styles.heroBadge}>AtlasKB</p>
+              <p style={styles.heroSubline}>Knowledge copilot</p>
+            </div>
+          </div>
           <h1 style={styles.heroTitle}>AtlasKB Studio</h1>
           <p style={styles.heroDesc}>
-            Converse with AI, capture every answer, and build a private knowledge
+            Chat with AI, capture every answer, and build a private knowledge
             brain you can search anytime.
           </p>
         </div>
@@ -193,6 +205,9 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     padding: 40,
+    backgroundImage:
+      "radial-gradient(circle at 20% 20%, rgba(59,130,246,0.18), transparent 55%), radial-gradient(circle at 80% 0%, rgba(16,185,129,0.18), transparent 45%), linear-gradient(135deg, #eef2ff, #e0f2fe)",
+    backgroundBlendMode: "screen",
   },
   container: {
     width: "100%",
@@ -213,16 +228,66 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    position: "relative",
+    overflow: "hidden",
+  },
+  heroBackdrop: {
+    position: "absolute",
+    inset: -30,
+    backgroundImage:
+      "radial-gradient(circle at 15% 20%, rgba(255,255,255,0.2), transparent 55%), radial-gradient(circle at 85% 0%, rgba(16,185,129,0.25), transparent 55%), url('/icon.png')",
+    backgroundRepeat: "no-repeat",
+    backgroundSize: "520px, 420px, 220px",
+    backgroundPosition:
+      "140px -60px, 80% -20px, calc(100% - 40px) calc(100% - 40px)",
+    opacity: 0.45,
+    filter: "blur(0.5px)",
+    pointerEvents: "none",
+    transform: "scale(1.15)",
+  },
+  heroBrand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 18,
+    marginBottom: 14,
+    position: "relative",
+    zIndex: 1,
   },
   heroTitle: {
     fontSize: 38,
     margin: "0 0 18px",
+    position: "relative",
+    zIndex: 1,
+  },
+  heroLogo: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    padding: 8,
+    background: "rgba(15,23,42,0.25)",
+    boxShadow: "0 20px 40px rgba(15,23,42,0.35)",
+    backdropFilter: "blur(4px)",
   },
   heroDesc: {
     fontSize: 18,
     lineHeight: 1.6,
     margin: 0,
     maxWidth: 360,
+    position: "relative",
+    zIndex: 1,
+  },
+  heroBadge: {
+    margin: 0,
+    fontSize: 13,
+    letterSpacing: 4,
+    textTransform: "uppercase",
+    color: "rgba(255,255,255,0.75)",
+  },
+  heroSubline: {
+    margin: "4px 0 0",
+    fontSize: 15,
+    color: "#fff",
+    opacity: 0.85,
   },
   card: {
     background: "rgba(255,255,255,0.98)",

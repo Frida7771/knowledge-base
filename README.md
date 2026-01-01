@@ -90,7 +90,7 @@ npm run dev                      # http://127.0.0.1:5173
 
 | Keyword Search | Knowledge Bases |
 | --- | --- |
-| ![Search](demo/2v.jpg) | ![Knowledge Bases](demo/1.jpg) |
+| ![Search](demo/2v.jpg) | ![Knowledge Bases](demo/2vv.jpg) |
 
 ---
 

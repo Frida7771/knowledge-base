@@ -27,7 +27,7 @@ async def create_kb(
     req: KnowledgeBaseCreate,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    kb = kb_service.create_kb_service(req)
+    kb = kb_service.create_kb_service(current_user.uuid, req)
     return {"code": 200, "data": kb}
 
 
@@ -37,7 +37,7 @@ async def list_kb(
     size: int = Query(10, description="data per page"),
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    data = kb_service.list_kb_service(page, size)
+    data = kb_service.list_kb_service(current_user.uuid, page, size)
     return {"code": 200, "data": data}
 
 
@@ -47,7 +47,7 @@ async def update_kb(
     req: KnowledgeBaseUpdate,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    kb = kb_service.update_kb_service(kb_uuid, req)
+    kb = kb_service.update_kb_service(current_user.uuid, kb_uuid, req)
     if not kb:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return {"code": 200, "data": kb}
@@ -58,7 +58,7 @@ async def delete_kb(
     kb_uuid: str,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    ok = kb_service.delete_kb_service(kb_uuid)
+    ok = kb_service.delete_kb_service(current_user.uuid, kb_uuid)
     if not ok:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return {"code": 200, "msg": "delete success"}
@@ -73,7 +73,7 @@ async def create_doc(
     req: KnowledgeDocumentCreate,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    doc = kb_service.create_doc_service(kb_uuid, req)
+    doc = kb_service.create_doc_service(current_user.uuid, kb_uuid, req)
     if not doc:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return {"code": 200, "data": doc}
@@ -86,7 +86,7 @@ async def list_docs(
     size: int = Query(10, description="data per page"),
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    data = kb_service.list_docs_service(kb_uuid, page, size)
+    data = kb_service.list_docs_service(current_user.uuid, kb_uuid, page, size)
     return {"code": 200, "data": data}
 
 
@@ -96,7 +96,7 @@ async def update_doc(
     req: KnowledgeDocumentUpdate,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    doc = kb_service.update_doc_service(doc_uuid, req)
+    doc = kb_service.update_doc_service(current_user.uuid, doc_uuid, req)
     if not doc:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "doc not found"})
     return {"code": 200, "data": doc}
@@ -107,7 +107,7 @@ async def delete_doc(
     doc_uuid: str,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    ok = kb_service.delete_doc_service(doc_uuid)
+    ok = kb_service.delete_doc_service(current_user.uuid, doc_uuid)
     if not ok:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "doc not found"})
     return {"code": 200, "msg": "delete success"}
@@ -121,7 +121,9 @@ async def import_docs(
 ) -> Dict[str, Any]:
     content = await file.read()
     try:
-        summary = kb_service.import_kb_file_service(kb_uuid, file.filename or "", content)
+        summary = kb_service.import_kb_file_service(
+            current_user.uuid, kb_uuid, file.filename or "", content
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"code": 400, "msg": str(exc)})
     if not summary:
@@ -134,7 +136,7 @@ async def export_kb(
     kb_uuid: str,
     current_user: UserClaim = Depends(get_current_user),
 ):
-    bundle = kb_service.export_kb_service(kb_uuid)
+    bundle = kb_service.export_kb_service(current_user.uuid, kb_uuid)
     if not bundle:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     bytes_io = io.BytesIO(bundle["content"])
@@ -153,7 +155,7 @@ async def kb_qa(
     req: KnowledgeQARequest,
     current_user: UserClaim = Depends(get_current_user),
 ) -> KnowledgeQAReply:
-    result = kb_service.qa_service(kb_uuid, req.question, req.top_k)
+    result = kb_service.qa_service(current_user.uuid, kb_uuid, req.question, req.top_k)
     if not result:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return result
@@ -175,7 +177,7 @@ async def semantic_search(
     req: SemanticSearchRequest,
     current_user: UserClaim = Depends(get_current_user),
 ):
-    result = kb_service.semantic_search_service(kb_uuid, req.query, req.top_k)
+    result = kb_service.semantic_search_service(current_user.uuid, kb_uuid, req.query, req.top_k)
     if result is None:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return {"code": 200, "data": result}
@@ -187,7 +189,7 @@ async def fulltext_search(
     req: FullTextSearchRequest,
     current_user: UserClaim = Depends(get_current_user),
 ):
-    result = kb_service.fulltext_search_service(kb_uuid, req.query, req.top_k)
+    result = kb_service.fulltext_search_service(current_user.uuid, kb_uuid, req.query, req.top_k)
     if result is None:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return {"code": 200, "data": result}

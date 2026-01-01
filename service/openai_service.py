@@ -34,6 +34,19 @@ def chat_completion(messages: List[Dict[str, str]], model: str = "gpt-4o") -> st
     return response.choices[0].message.content
 
 
+def stream_chat_completion(messages: List[Dict[str, str]], model: str = "gpt-4o"):
+    client = get_openai_client()
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        stream=True,
+    )
+    for chunk in response:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
+
+
 def create_embeddings(text: str, model: str = "text-embedding-ada-002") -> List[float]:
     """
     create text embedding vector

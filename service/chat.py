@@ -12,8 +12,8 @@ from dao.chat_dao import (
     list_messages,
 )
 from models.chat import Chat, ChatCreate, ChatMessage, ChatMessageCreate, ChatReply
-from service.kb import save_qa_to_kb
-from service.openai_service import chat_completion
+from service.kb import save_qa_to_kb, get_owned_kb
+from service.openai_service import chat_completion, stream_chat_completion
 
 
 def _now_ms() -> int:
@@ -21,29 +21,19 @@ def _now_ms() -> int:
 
 
 def create_chat_service(user_uuid: str, req: ChatCreate) -> Chat:
-    title = req.title or (req.first_question or "new chat")
+    title = req.title or "new chat"
+    kb_uuid = req.kb_uuid
+    if kb_uuid and not get_owned_kb(kb_uuid, user_uuid):
+        raise ValueError("knowledge base not found")
     chat = Chat(
         uuid=str(uuid.uuid4()),
-        kb_uuid=req.kb_uuid,
+        kb_uuid=kb_uuid,
         title=title,
         user_uuid=user_uuid,
         create_at=_now_ms(),
         update_at=_now_ms(),
     )
     create_chat(chat.dict())
-
-    # if there is a first question, insert it as the first user message and generate reply
-    if req.first_question:
-        user_msg = ChatMessage(
-            uuid=str(uuid.uuid4()),
-            chat_uuid=chat.uuid,
-            role="user",
-            content=req.first_question,
-            create_at=_now_ms(),
-        )
-        append_message(user_msg.dict())
-        # generate reply
-        _generate_and_store_reply(chat, user_msg.content)
 
     return chat
 
@@ -111,6 +101,32 @@ def send_message_service(
     return reply
 
 
+def stream_message_service(
+    user_uuid: str, chat_uuid: str, req: ChatMessageCreate
+):
+    chat_data = get_chat(chat_uuid)
+    if not chat_data or chat_data.get("user_uuid") != user_uuid:
+        return None
+
+    chat_obj = Chat(**chat_data)
+    user_msg = ChatMessage(
+        uuid=str(uuid.uuid4()),
+        chat_uuid=chat_uuid,
+        role="user",
+        content=req.content,
+        create_at=_now_ms(),
+    )
+    append_message(user_msg.dict())
+
+    def generator():
+        for chunk in stream_reply_generator(chat_obj, req.content):
+            if chunk:
+                yield chunk
+        update_chat(chat_uuid, {"update_at": _now_ms(), "title": chat_obj.title})
+
+    return generator()
+
+
 def _generate_and_store_reply(chat_obj: Chat, question: str) -> ChatReply:
     """
     Use conversation history to generate reply.
@@ -132,10 +148,32 @@ def _generate_and_store_reply(chat_obj: Chat, question: str) -> ChatReply:
 
     # 3. if kb_uuid is bound, write Q&A as doc into the kb, and generate vector for the answer
     if chat_obj.kb_uuid:
-        save_qa_to_kb(chat_obj.kb_uuid, question, answer)
+        if get_owned_kb(chat_obj.kb_uuid, chat_obj.user_uuid):
+            save_qa_to_kb(chat_obj.kb_uuid, question, answer)
 
     # currently context is conversation history, already used by model
     return ChatReply(answer=answer, context=[])
+
+
+def stream_reply_generator(chat_obj: Chat, question: str):
+    history_docs = list_messages(chat_obj.uuid, limit=20)
+    messages = _build_completion_messages(history_docs, question)
+    buffer = ""
+    for chunk in stream_chat_completion(messages):
+        if chunk:
+            buffer += chunk
+            yield chunk
+    if buffer:
+        assistant_msg = ChatMessage(
+            uuid=str(uuid.uuid4()),
+            chat_uuid=chat_obj.uuid,
+            role="assistant",
+            content=buffer,
+            create_at=_now_ms(),
+        )
+        append_message(assistant_msg.dict())
+        if chat_obj.kb_uuid and get_owned_kb(chat_obj.kb_uuid, chat_obj.user_uuid):
+            save_qa_to_kb(chat_obj.kb_uuid, question, buffer)
 
 
 def _build_completion_messages(

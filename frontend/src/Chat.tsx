@@ -174,79 +174,124 @@ const ChatPage = ({
     };
   }, [chatUuid, hasToken, token]);
 
+  const ensureChatExists = async (question: string): Promise<string> => {
+    if (chatUuid) {
+      return chatUuid;
+    }
+    const authHeader = { Authorization: `Bearer ${token.trim()}` };
+    const res = await axios.post(
+      `${API_BASE}/api/v1/chat`,
+      {
+        kb_uuid: kbUuid.trim() || null,
+        title: question.slice(0, 50) || "My conversation",
+      },
+      { headers: authHeader }
+    );
+    const created = res.data?.data;
+    const createdUuid: string | null =
+      (created?.uuid as string | undefined) ?? null;
+    if (!createdUuid) {
+      throw new Error("Failed to create chat: missing uuid");
+    }
+    persistChatUuid(createdUuid);
+    if (created) {
+      setChats((prev) => [created, ...prev.filter((c) => c.uuid !== created.uuid)]);
+    }
+    return createdUuid;
+  };
+
+  const streamAssistantReply = async (
+    currentChatUuid: string,
+    question: string
+  ) => {
+    const response = await fetch(
+      `${API_BASE}/api/v1/chat/${currentChatUuid}/message/stream`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: question }),
+      }
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || "Stream request failed");
+    }
+
+    const assistantId = `${Date.now()}-assistant`;
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: "assistant", content: "" },
+    ]);
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    try {
+      if (!reader) {
+        const text = await response.text();
+        if (text) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantId
+                ? { ...msg, content: msg.content + text }
+                : msg
+            )
+          );
+        }
+        return;
+      }
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        const chunk = decoder.decode(value, { stream: true });
+        if (!chunk) continue;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: msg.content + chunk }
+              : msg
+          )
+        );
+      }
+      const remaining = decoder.decode();
+      if (remaining) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, content: msg.content + remaining }
+              : msg
+          )
+        );
+      }
+    } catch (err) {
+      setMessages((prev) => prev.filter((msg) => msg.id !== assistantId));
+      throw err;
+    }
+  };
+
   const handleSend = async () => {
     const question = input.trim();
     if (!question || !hasToken || loading) return;
 
     setError(null);
     setInput("");
+    const userMessageId = `${Date.now()}-user`;
     setMessages((prev) => [
       ...prev,
-      { id: `${Date.now()}-user`, role: "user", content: question },
+      { id: userMessageId, role: "user", content: question },
     ]);
 
     try {
       setLoading(true);
-
-      const authHeader = { Authorization: `Bearer ${token.trim()}` };
-
-      let currentChatUuid = chatUuid;
-
-      // 第一次发送：如果还没有 chat，则先创建一个
-      if (!currentChatUuid) {
-        const createRes = await axios.post(
-          `${API_BASE}/api/v1/chat`,
-          {
-            kb_uuid: kbUuid.trim() || null,
-            title: "My conversation",
-            first_question: question,
-          },
-          { headers: authHeader }
-        );
-        const created = createRes.data?.data;
-        const createdUuid: string | null =
-          (created?.uuid as string | undefined) ?? null;
-        if (!createdUuid) {
-          throw new Error("Failed to create chat: missing uuid");
-        }
-        currentChatUuid = createdUuid;
-        persistChatUuid(createdUuid);
-        if (created) {
-          setChats((prev) => [created, ...prev.filter((c) => c.uuid !== created.uuid)]);
-        }
-
-        // 拉一次消息列表，展示完整对话
-        const msgRes = await axios.get(
-          `${API_BASE}/api/v1/chat/${currentChatUuid}/messages`,
-          { headers: authHeader }
-        );
-        const list = msgRes.data as any[];
-        setMessages(
-          list.map((m) => ({
-            id: m.uuid as string,
-            role: m.role === "assistant" ? "assistant" : "user",
-            content: m.content as string,
-          }))
-        );
-      } else {
-        // 已有 chat，直接发消息
-        const sendRes = await axios.post(
-          `${API_BASE}/api/v1/chat/${currentChatUuid}/message`,
-          { content: question },
-          { headers: authHeader }
-        );
-        const reply = sendRes.data as { answer: string; context?: string[] };
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-assistant`,
-            role: "assistant",
-            content: reply.answer,
-            context: reply.context,
-          },
-        ]);
-      }
+      const currentChatUuid = await ensureChatExists(question);
+      await streamAssistantReply(currentChatUuid, question);
+      loadChats();
     } catch (e: any) {
       console.error(e);
       const msg =

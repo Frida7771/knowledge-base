@@ -71,11 +71,21 @@ def create_kb(doc: Dict[str, Any]) -> None:
     client.index(index=KB_INDEX, document=doc)
 
 
-def update_kb(uuid: str, fields: Dict[str, Any]) -> None:
+def update_kb(uuid: str, fields: Dict[str, Any], owner_uuid: Optional[str] = None) -> None:
     client = get_es_client()
     _ensure_indices(client)
     # get _id and then update
-    res = client.search(index=KB_INDEX, query={"term": {"uuid": uuid}})
+    query: Dict[str, Any] = {"term": {"uuid": uuid}}
+    if owner_uuid:
+        query = {
+            "bool": {
+                "filter": [
+                    {"term": {"uuid": uuid}},
+                    {"term": {"owner_uuid.keyword": owner_uuid}},
+                ]
+            }
+        }
+    res = client.search(index=KB_INDEX, query=query)
     hits = res.get("hits", {}).get("hits", [])
     if not hits:
         return
@@ -97,7 +107,7 @@ def delete_kb(uuid: str) -> None:
     client.delete_by_query(index=KB_DOC_EMBED_INDEX, body={"query": {"term": {"kb_uuid": uuid}}})
 
 
-def list_kb(page: int, size: int) -> Dict[str, Any]:
+def list_kb(page: int, size: int, owner_uuid: str) -> Dict[str, Any]:
     client = get_es_client()
     _ensure_indices(client)
     res = client.search(
@@ -105,17 +115,27 @@ def list_kb(page: int, size: int) -> Dict[str, Any]:
         from_=(page - 1) * size,
         size=size,
         sort=[{"create_at": {"order": "desc"}}],
-        query={"match_all": {}},
+        query={"term": {"owner_uuid.keyword": owner_uuid}},
     )
     total = res.get("hits", {}).get("total", {}).get("value", 0)
     items = [hit["_source"] for hit in res.get("hits", {}).get("hits", [])]
     return {"total": total, "list": items}
 
 
-def get_kb(uuid: str) -> Optional[Dict[str, Any]]:
+def get_kb(uuid: str, owner_uuid: Optional[str] = None) -> Optional[Dict[str, Any]]:
     client = get_es_client()
     _ensure_indices(client)
-    res = client.search(index=KB_INDEX, query={"term": {"uuid": uuid}})
+    query: Dict[str, Any] = {"term": {"uuid": uuid}}
+    if owner_uuid:
+        query = {
+            "bool": {
+                "filter": [
+                    {"term": {"uuid": uuid}},
+                    {"term": {"owner_uuid.keyword": owner_uuid}},
+                ]
+            }
+        }
+    res = client.search(index=KB_INDEX, query=query)
     hits = res.get("hits", {}).get("hits", [])
     if not hits:
         return None

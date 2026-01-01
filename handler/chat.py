@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from middleware.auth import get_current_user, UserClaim
@@ -20,7 +21,10 @@ async def create_chat(
     req: ChatCreate,
     current_user: UserClaim = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    chat = chat_service.create_chat_service(current_user.uuid, req)
+    try:
+        chat = chat_service.create_chat_service(current_user.uuid, req)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": str(exc)})
     return {"code": 200, "data": chat}
 
 
@@ -85,5 +89,25 @@ async def send_message(
     if not reply:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "chat not found"})
     return reply
+
+
+@router.post("/chat/{chat_uuid}/message/stream", summary="send message with streaming response")
+async def send_message_stream(
+    chat_uuid: str,
+    req: ChatMessageCreate,
+    current_user: UserClaim = Depends(get_current_user),
+):
+    generator = chat_service.stream_message_service(
+        current_user.uuid, chat_uuid, req
+    )
+    if not generator:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "chat not found"})
+
+    def iter_chunks():
+        for chunk in generator:
+            if chunk:
+                yield chunk.encode("utf-8")
+
+    return StreamingResponse(iter_chunks(), media_type="text/plain; charset=utf-8")
 
 

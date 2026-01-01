@@ -62,14 +62,26 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+def _get_owned_kb(kb_uuid: str, owner_uuid: str) -> Optional[KnowledgeBase]:
+    kb_data = get_kb(kb_uuid, owner_uuid=owner_uuid)
+    if not kb_data:
+        return None
+    return KnowledgeBase(**kb_data)
+
+
+def get_owned_kb(kb_uuid: str, owner_uuid: str) -> Optional[KnowledgeBase]:
+    return _get_owned_kb(kb_uuid, owner_uuid)
+
+
 # ==== kb ====
 
 
-def create_kb_service(req: KnowledgeBaseCreate) -> KnowledgeBase:
+def create_kb_service(owner_uuid: str, req: KnowledgeBaseCreate) -> KnowledgeBase:
     kb = KnowledgeBase(
         uuid=str(uuid.uuid4()),
         name=req.name,
         description=req.description,
+        owner_uuid=owner_uuid,
         create_at=_now_ms(),
         update_at=_now_ms(),
     )
@@ -77,9 +89,9 @@ def create_kb_service(req: KnowledgeBaseCreate) -> KnowledgeBase:
     return kb
 
 
-def update_kb_service(uuid_: str, req: KnowledgeBaseUpdate) -> Optional[KnowledgeBase]:
-    kb_data = get_kb(uuid_)
-    if not kb_data:
+def update_kb_service(owner_uuid: str, uuid_: str, req: KnowledgeBaseUpdate) -> Optional[KnowledgeBase]:
+    kb = _get_owned_kb(uuid_, owner_uuid)
+    if not kb:
         return None
 
     fields: Dict[str, Any] = {}
@@ -88,33 +100,34 @@ def update_kb_service(uuid_: str, req: KnowledgeBaseUpdate) -> Optional[Knowledg
     if req.description is not None:
         fields["description"] = req.description
     if not fields:
-        return KnowledgeBase(**kb_data)
+        return kb
 
     fields["update_at"] = _now_ms()
-    update_kb(uuid_, fields)
-    kb_data.update(fields)
-    return KnowledgeBase(**kb_data)
+    update_kb(uuid_, fields, owner_uuid=owner_uuid)
+    kb_dict = kb.dict()
+    kb_dict.update(fields)
+    return KnowledgeBase(**kb_dict)
 
 
-def delete_kb_service(uuid_: str) -> bool:
-    kb_data = get_kb(uuid_)
-    if not kb_data:
+def delete_kb_service(owner_uuid: str, uuid_: str) -> bool:
+    kb = _get_owned_kb(uuid_, owner_uuid)
+    if not kb:
         return False
     delete_kb(uuid_)
     return True
 
 
-def list_kb_service(page: int, size: int) -> Dict[str, Any]:
-    return list_kb(page, size)
+def list_kb_service(owner_uuid: str, page: int, size: int) -> Dict[str, Any]:
+    return list_kb(page, size, owner_uuid)
 
 
 # ==== doc ====
 
 
 def create_doc_service(
-    kb_uuid: str, req: KnowledgeDocumentCreate
+    owner_uuid: str, kb_uuid: str, req: KnowledgeDocumentCreate
 ) -> Optional[KnowledgeDocument]:
-    if not get_kb(kb_uuid):
+    if not _get_owned_kb(kb_uuid, owner_uuid):
         return None
 
     doc = KnowledgeDocument(
@@ -134,10 +147,13 @@ def create_doc_service(
 
 
 def update_doc_service(
-    uuid_: str, req: KnowledgeDocumentUpdate
+    owner_uuid: str, uuid_: str, req: KnowledgeDocumentUpdate
 ) -> Optional[KnowledgeDocument]:
     doc_data = get_doc(uuid_)
     if not doc_data:
+        return None
+    kb_uuid = doc_data.get("kb_uuid")
+    if not kb_uuid or not _get_owned_kb(kb_uuid, owner_uuid):
         return None
 
     fields: Dict[str, Any] = {}
@@ -160,15 +176,17 @@ def update_doc_service(
     return doc
 
 
-def delete_doc_service(uuid_: str) -> bool:
+def delete_doc_service(owner_uuid: str, uuid_: str) -> bool:
     doc_data = get_doc(uuid_)
-    if not doc_data:
+    if not doc_data or not _get_owned_kb(doc_data.get("kb_uuid", ""), owner_uuid):
         return False
     delete_doc(uuid_)
     return True
 
 
-def list_docs_service(kb_uuid: str, page: int, size: int) -> Dict[str, Any]:
+def list_docs_service(owner_uuid: str, kb_uuid: str, page: int, size: int) -> Dict[str, Any]:
+    if not _get_owned_kb(kb_uuid, owner_uuid):
+        return {"total": 0, "list": []}
     return list_docs(kb_uuid, page, size)
 
 
@@ -208,8 +226,8 @@ def _generate_and_store_embeddings_for_doc(doc: KnowledgeDocument) -> None:
     upsert_doc_embeddings(doc.kb_uuid, doc.uuid, vectors)
 
 
-def qa_service(kb_uuid: str, question: str, top_k: int = 3) -> Optional[KnowledgeQAReply]:
-    if not get_kb(kb_uuid):
+def qa_service(owner_uuid: str, kb_uuid: str, question: str, top_k: int = 3) -> Optional[KnowledgeQAReply]:
+    if not _get_owned_kb(kb_uuid, owner_uuid):
         return None
 
     context_chunks = _retrieve_context_chunks(kb_uuid, question, top_k)
@@ -253,14 +271,14 @@ def save_qa_to_kb(kb_uuid: str, question: str, answer: str) -> None:
     )
 
 
-def semantic_search_service(kb_uuid: str, query: str, top_k: int = 5) -> Optional[List[Dict[str, Any]]]:
+def semantic_search_service(owner_uuid: str, kb_uuid: str, query: str, top_k: int = 5) -> Optional[List[Dict[str, Any]]]:
     """
     do vector semantic search for the specified kb:
     - generate embedding for the query
     - fetch all vectors under the kb from kb_doc_embed_index
     - calculate cosine similarity, return top_k chunks + scores
     """
-    if not get_kb(kb_uuid):
+    if not _get_owned_kb(kb_uuid, owner_uuid):
         return None
 
     query_vector = create_embeddings(query)
@@ -291,6 +309,7 @@ def semantic_search_service(kb_uuid: str, query: str, top_k: int = 5) -> Optiona
 
 
 def fulltext_search_service(
+    owner_uuid: str,
     kb_uuid: str,
     query: str,
     top_k: int = 5,
@@ -298,12 +317,13 @@ def fulltext_search_service(
     """
     Keyword-based full-text search with ES highlighting.
     """
-    if not get_kb(kb_uuid):
+    if not _get_owned_kb(kb_uuid, owner_uuid):
         return None
     return search_docs_fulltext(kb_uuid, query, top_k)
 
 
 def import_kb_file_service(
+    owner_uuid: str,
     kb_uuid: str,
     filename: str,
     file_bytes: bytes,
@@ -312,7 +332,7 @@ def import_kb_file_service(
     Parse uploaded file(s) and insert docs into KB.
     Supports markdown/txt/csv/docx/pptx/pdf.
     """
-    if not get_kb(kb_uuid):
+    if not _get_owned_kb(kb_uuid, owner_uuid):
         return None
 
     docs = _extract_docs_from_upload(filename, file_bytes)
@@ -333,6 +353,7 @@ def import_kb_file_service(
             continue
         try:
             create_doc_service(
+                owner_uuid,
                 kb_uuid,
                 KnowledgeDocumentCreate(title=title or f"Imported {idx}", content=content),
             )
@@ -432,14 +453,15 @@ def _score_vectors_locally(
     return scored[:top_k]
 
 
-def export_kb_service(kb_uuid: str) -> Optional[Dict[str, Any]]:
+def export_kb_service(owner_uuid: str, kb_uuid: str) -> Optional[Dict[str, Any]]:
     """
     Bundle kb metadata, documents, and embeddings into a zip for download.
     """
-    kb_data = get_kb(kb_uuid)
-    if not kb_data:
+    kb = _get_owned_kb(kb_uuid, owner_uuid)
+    if not kb:
         return None
 
+    kb_data = kb.dict()
     docs = _fetch_all_docs(kb_uuid)
     embeddings = list_doc_embeddings(kb_uuid)
 

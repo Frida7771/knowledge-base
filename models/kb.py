@@ -9,6 +9,7 @@ class KnowledgeBase(BaseModel):
     uuid: str
     name: str
     description: Optional[str] = None
+    owner_uuid: str
     create_at: int
     update_at: int
 
