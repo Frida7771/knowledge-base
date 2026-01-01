@@ -85,11 +85,11 @@ npm run dev                      # http://127.0.0.1:5173
 
 | Login & Tabs | Chat Workspace |
 | --- | --- |
-| ![Login](demo/login.png) | ![Chat](demo/chat.png) |
+| ![Login](demo/4.jpg) | ![Chat](demo/3.jpg) |
 
 | Keyword Search | Knowledge Bases |
 | --- | --- |
-| ![Search](demo/search.png) | ![Knowledge Bases](demo/knowledge-bases.png) |
+| ![Search](demo/2.jpg) | ![Knowledge Bases](demo/1.jpg) |
 
 ---
 
