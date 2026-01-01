@@ -1,6 +1,8 @@
+import io
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.responses import StreamingResponse
 
 from middleware.auth import get_current_user, UserClaim
 from models.kb import (
@@ -111,6 +113,21 @@ async def delete_doc(
     return {"code": 200, "msg": "delete success"}
 
 
+@router.get("/kb/{kb_uuid}/export", summary="export kb bundle")
+async def export_kb(
+    kb_uuid: str,
+    current_user: UserClaim = Depends(get_current_user),
+):
+    bundle = kb_service.export_kb_service(kb_uuid)
+    if not bundle:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
+    bytes_io = io.BytesIO(bundle["content"])
+    headers = {
+        "Content-Disposition": f'attachment; filename="{bundle["filename"]}"'
+    }
+    return StreamingResponse(bytes_io, media_type="application/zip", headers=headers)
+
+
 # ==== QA ====
 
 
@@ -131,6 +148,11 @@ class SemanticSearchRequest(BaseModel):
     top_k: int = 5
 
 
+class FullTextSearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
 @router.post("/kb/{kb_uuid}/semantic-search", summary="kb vector semantic search")
 async def semantic_search(
     kb_uuid: str,
@@ -138,6 +160,18 @@ async def semantic_search(
     current_user: UserClaim = Depends(get_current_user),
 ):
     result = kb_service.semantic_search_service(kb_uuid, req.query, req.top_k)
+    if result is None:
+        raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
+    return {"code": 200, "data": result}
+
+
+@router.post("/kb/{kb_uuid}/fulltext-search", summary="kb keyword search")
+async def fulltext_search(
+    kb_uuid: str,
+    req: FullTextSearchRequest,
+    current_user: UserClaim = Depends(get_current_user),
+):
+    result = kb_service.fulltext_search_service(kb_uuid, req.query, req.top_k)
     if result is None:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "kb not found"})
     return {"code": 200, "data": result}

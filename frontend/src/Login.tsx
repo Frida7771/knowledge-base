@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-
-const API_BASE = "http://127.0.0.1:8000";
+import { API_BASE } from "./config";
 
 type Props = {
   onSuccess: (token: string) => void;
@@ -12,6 +11,7 @@ const LoginPage = ({ onSuccess }: Props) => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [showRegister, setShowRegister] = useState(false);
 
   // 自动带上上次的用户名
@@ -22,11 +22,11 @@ const LoginPage = ({ onSuccess }: Props) => {
 
   const loginOnce = async (u: string, p: string) => {
     const res = await axios.post(`${API_BASE}/api/v1/login`, {
-      username: u,
+      identifier: u,
       password: p,
     });
     const t = res.data?.data?.token as string | undefined;
-    if (!t) throw new Error("登录失败：未返回 token");
+    if (!t) throw new Error("Login failed: token missing");
     return t;
   };
 
@@ -34,10 +34,11 @@ const LoginPage = ({ onSuccess }: Props) => {
     const u = email.trim();
     const p = password;
     if (!u || !p) {
-      setError("请输入邮箱和密码");
+      setError("Please enter email and password");
       return;
     }
     setError(null);
+    setInfo(null);
     setLoading(true);
     try {
       const token = await loginOnce(u, p);
@@ -46,22 +47,21 @@ const LoginPage = ({ onSuccess }: Props) => {
       onSuccess(token);
       setPassword("");
     } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      const detailMsg =
+        typeof detail === "string" ? detail : detail?.msg || detail?.message;
       const rawMsg =
-        e?.response?.data?.msg ||
-        e?.response?.data?.detail ||
-        e?.message ||
-        "";
+        detailMsg || e?.response?.data?.msg || e?.message || "";
       // 如果是用户不存在，引导去注册
-      if (String(rawMsg).includes("不存在") || String(rawMsg).includes("未找到")) {
+      if (
+        String(rawMsg).includes("不存在") ||
+        String(rawMsg).includes("未找到") ||
+        String(rawMsg).toLowerCase().includes("not found")
+      ) {
         setShowRegister(true);
-        setError("用户名不存在，请先注册");
+        setError("User not found, please register first");
       } else {
-        setError(
-          String(
-            rawMsg ||
-              "登录失败，请检查邮箱/密码"
-          )
-        );
+        setError(String(rawMsg || "Login failed, please check credentials"));
       }
     } finally {
       setLoading(false);
@@ -72,33 +72,28 @@ const LoginPage = ({ onSuccess }: Props) => {
     const u = email.trim();
     const p = password;
     if (!u || !p) {
-      setError("请输入邮箱和密码");
+      setError("Please enter email and password");
       return;
     }
     setError(null);
+    setInfo(null);
     setLoading(true);
     try {
-      const randomUsername =
-        "user-" +
-        (crypto?.randomUUID
-          ? crypto.randomUUID().slice(0, 8)
-          : Math.random().toString(36).slice(2, 10));
       await axios.post(`${API_BASE}/api/v1/register`, {
-        username: randomUsername,
         password: p,
         email: u,
       });
-      const token = await loginOnce(u, p);
-      localStorage.setItem("kb-token", token);
+      setInfo("Registration succeeded, please sign in.");
+      setShowRegister(false);
       localStorage.setItem("kb-email", u);
-      onSuccess(token);
       setPassword("");
     } catch (e: any) {
+      const detail = e?.response?.data?.detail;
       const msg =
+        (typeof detail === "string" ? detail : detail?.msg || detail?.message) ||
         e?.response?.data?.msg ||
-        e?.response?.data?.detail ||
         e?.message ||
-        "注册或登录失败，请检查邮箱/密码";
+        "Register/login failed, please check credentials";
       setError(String(msg));
     } finally {
       setLoading(false);
@@ -107,61 +102,85 @@ const LoginPage = ({ onSuccess }: Props) => {
 
   return (
     <div style={styles.page}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>{showRegister ? "注册" : "登录"}</h2>
-        <div style={styles.field}>
-          <label style={styles.label}>邮箱</label>
-          <input
-            style={styles.input}
-            type="email"
-            placeholder="邮箱"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+      <div style={styles.container}>
+        <div style={styles.hero}>
+          <h1 style={styles.heroTitle}>Knowledge Base Studio</h1>
+          <p style={styles.heroDesc}>
+            Converse with AI, capture every answer, and build a private knowledge
+            brain you can search anytime.
+          </p>
         </div>
-        <div style={styles.field}>
-          <label style={styles.label}>密码</label>
-          <input
-            style={styles.input}
-            type="password"
-            placeholder="密码"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleLogin();
-              }
-            }}
-          />
-        </div>
-        {error && <div style={styles.error}>{error}</div>}
-        {showRegister ? (
-          <button
-            style={styles.btn}
-            onClick={handleRegister}
-            disabled={loading || !email.trim() || !password.trim()}
-          >
-            {loading ? "请稍候..." : "注册并登录"}
-          </button>
-        ) : (
-          <>
+
+        <div style={styles.card}>
+          <h2 style={styles.title}>{showRegister ? "Sign up" : "Sign in"}</h2>
+          <div style={styles.field}>
+            <label style={styles.label}>Email</label>
+            <input
+              style={styles.input}
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div style={styles.field}>
+            <label style={styles.label}>Password</label>
+            <input
+              style={styles.input}
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleLogin();
+                }
+              }}
+            />
+          </div>
+          {error && <div style={styles.error}>{error}</div>}
+          {info && <div style={styles.info}>{info}</div>}
+          {showRegister ? (
             <button
               style={styles.btn}
-              onClick={handleLogin}
+              onClick={handleRegister}
               disabled={loading || !email.trim() || !password.trim()}
             >
-              {loading ? "请稍候..." : "登录"}
+              {loading ? "Please wait…" : "Sign up & sign in"}
             </button>
+          ) : (
+            <>
+              <button
+                style={styles.btn}
+                onClick={handleLogin}
+                disabled={loading || !email.trim() || !password.trim()}
+              >
+                {loading ? "Please wait…" : "Sign in"}
+              </button>
+              <button
+                style={styles.secondaryBtn}
+                onClick={() => setShowRegister(true)}
+                disabled={loading}
+              >
+                New here? Create an account
+              </button>
+            </>
+          )}
+          {showRegister && (
             <button
               style={styles.secondaryBtn}
-              onClick={() => setShowRegister(true)}
+              onClick={() => {
+                setShowRegister(false);
+                setInfo(null);
+                setError(null);
+              }}
               disabled={loading}
             >
-              我是新用户，去注册
+              Back to sign in
             </button>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -169,27 +188,53 @@ const LoginPage = ({ onSuccess }: Props) => {
 
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    height: "100vh",
+    minHeight: "100vh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#f0f2f5",
-    padding: 16,
+    padding: 40,
+  },
+  container: {
+    width: "100%",
+    maxWidth: 1100,
+    display: "grid",
+    gridTemplateColumns: "1.1fr 0.9fr",
+    gap: 32,
+    alignItems: "stretch",
+    margin: "0 auto",
+  },
+  hero: {
+    background:
+      "linear-gradient(135deg, rgba(59,130,246,0.92), rgba(79,70,229,0.9))",
+    borderRadius: 32,
+    padding: 48,
+    color: "#fff",
+    boxShadow: "0 40px 70px rgba(59,130,246,0.35)",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+  heroTitle: {
+    fontSize: 38,
+    margin: "0 0 18px",
+  },
+  heroDesc: {
+    fontSize: 18,
+    lineHeight: 1.6,
+    margin: 0,
+    maxWidth: 360,
   },
   card: {
-    width: "100%",
-    maxWidth: 420,
-    background: "#fff",
-    borderRadius: 12,
-    padding: 24,
-    boxShadow:
-      "0 12px 24px rgba(15,23,42,0.08), 0 0 0 1px rgba(148,163,184,0.2)",
-    boxSizing: "border-box",
+    background: "rgba(255,255,255,0.98)",
+    borderRadius: 24,
+    padding: 32,
+    boxShadow: "0 30px 55px rgba(15,23,42,0.15)",
   },
   title: {
     margin: "0 0 16px",
-    fontSize: 20,
+    fontSize: 24,
     color: "#0f172a",
+    fontWeight: 600,
   },
   field: {
     display: "flex",
@@ -203,25 +248,26 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     padding: "10px 12px",
-    borderRadius: 8,
+    borderRadius: 12,
     border: "1px solid #d0d7de",
     fontSize: 14,
   },
   btn: {
     width: "100%",
-    padding: "10px 0",
-    borderRadius: 8,
+    padding: "12px 0",
+    borderRadius: 12,
     border: "none",
-    background: "#1677ff",
+    background: "#2563eb",
     color: "#fff",
     fontSize: 15,
     cursor: "pointer",
     marginTop: 4,
+    boxShadow: "0 15px 30px rgba(37,99,235,0.35)",
   },
   secondaryBtn: {
     width: "100%",
     padding: "10px 0",
-    borderRadius: 8,
+    borderRadius: 12,
     border: "1px solid #d0d7de",
     background: "#fff",
     color: "#0f172a",
@@ -233,6 +279,11 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#dc2626",
     fontSize: 12,
     marginBottom: 4,
+  },
+  info: {
+    color: "#059669",
+    fontSize: 13,
+    marginTop: 6,
   },
 };
 

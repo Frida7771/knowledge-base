@@ -60,6 +60,21 @@ def delete_chat_service(user_uuid: str, chat_uuid: str) -> bool:
     return True
 
 
+def update_chat_title_service(user_uuid: str, chat_uuid: str, title: str) -> bool:
+    chat_data = get_chat(chat_uuid)
+    if not chat_data or chat_data.get("user_uuid") != user_uuid:
+        return False
+    new_title = title.strip() or "Untitled chat"
+    update_chat(
+        chat_uuid,
+        {
+            "title": new_title,
+            "update_at": _now_ms(),
+        },
+    )
+    return True
+
+
 def list_messages_service(user_uuid: str, chat_uuid: str, limit: int = 50) -> List[ChatMessage]:
     chat_data = get_chat(chat_uuid)
     if not chat_data or chat_data.get("user_uuid") != user_uuid:
@@ -98,13 +113,12 @@ def send_message_service(
 
 def _generate_and_store_reply(chat_obj: Chat, question: str) -> ChatReply:
     """
-    only send current question to OpenAI:
-    - do not use history conversation
-    - do not use kb content
-    - if kb_uuid is bound, write Q&A as doc into the kb (only for ES query)
+    Use conversation history to generate reply.
+    If kb_uuid is bound, still write Q&A into KB for later retrieval.
     """
-    # 1. only send current question to OpenAI
-    answer = chat_completion([{"role": "user", "content": question}])
+    history_docs = list_messages(chat_obj.uuid, limit=20)
+    messages = _build_completion_messages(history_docs, question)
+    answer = chat_completion(messages)
 
     # 2. insert assistant message
     assistant_msg = ChatMessage(
@@ -117,11 +131,44 @@ def _generate_and_store_reply(chat_obj: Chat, question: str) -> ChatReply:
     append_message(assistant_msg.dict())
 
     # 3. if kb_uuid is bound, write Q&A as doc into the kb, and generate vector for the answer
-    context_chunks: List[str] = []
     if chat_obj.kb_uuid:
         save_qa_to_kb(chat_obj.kb_uuid, question, answer)
 
-    # context is empty, means no kb or history conversation content was fed to the model
-    return ChatReply(answer=answer, context=context_chunks)
+    # currently context is conversation history, already used by model
+    return ChatReply(answer=answer, context=[])
+
+
+def _build_completion_messages(
+    history_docs: List[Dict[str, Any]],
+    current_question: str,
+    max_turns: int = 10,
+) -> List[Dict[str, str]]:
+    """
+    Convert stored chat history into OpenAI chat completion format.
+    """
+    base_prompt = (
+        "You are a helpful assistant. Use the previous conversation context to answer. "
+        "If earlier turns contain relevant facts, reference them directly instead of repeating questions."
+    )
+    messages: List[Dict[str, str]] = [{"role": "system", "content": base_prompt}]
+
+    last_content = None
+    if history_docs:
+        trimmed = history_docs[-max_turns:]
+        for doc in trimmed:
+            role = doc.get("role", "user")
+            if role not in {"user", "assistant"}:
+                role = "user"
+            content = doc.get("content", "")
+            if not content:
+                continue
+            messages.append({"role": role, "content": content})
+            last_content = content
+
+    current_question = (current_question or "").strip()
+    if current_question and current_question != last_content:
+        messages.append({"role": "user", "content": current_question})
+
+    return messages
 
 

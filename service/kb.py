@@ -1,7 +1,11 @@
 import uuid
 import math
+import io
+import json
+import zipfile
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+import re
 
 from dao.kb_dao import (
     create_kb,
@@ -17,6 +21,7 @@ from dao.kb_dao import (
     upsert_doc_embeddings,
     list_doc_embeddings,
     search_doc_embeddings_by_vector,
+    search_docs_fulltext,
 )
 from models.kb import (
     KnowledgeBase,
@@ -172,6 +177,25 @@ def _chunk_text(content: str, max_chars: int = 400) -> List[str]:
     return chunks
 
 
+def _generate_and_store_embeddings_for_doc(doc: KnowledgeDocument) -> None:
+    chunks = _chunk_text(doc.content)
+    if not chunks:
+        return
+
+    vectors: List[Dict[str, Any]] = []
+    for chunk in chunks:
+        embedding = create_embeddings(chunk)
+        vectors.append(
+            {
+                "uuid": str(uuid.uuid4()),
+                "chunk": chunk,
+                "embedding": embedding,
+                "create_at": _now_ms(),
+            }
+        )
+    upsert_doc_embeddings(doc.kb_uuid, doc.uuid, vectors)
+
+
 def qa_service(kb_uuid: str, question: str, top_k: int = 3) -> Optional[KnowledgeQAReply]:
     if not get_kb(kb_uuid):
         return None
@@ -252,6 +276,19 @@ def semantic_search_service(kb_uuid: str, query: str, top_k: int = 5) -> Optiona
             }
         )
     return formatted
+
+
+def fulltext_search_service(
+    kb_uuid: str,
+    query: str,
+    top_k: int = 5,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Keyword-based full-text search with ES highlighting.
+    """
+    if not get_kb(kb_uuid):
+        return None
+    return search_docs_fulltext(kb_uuid, query, top_k)
 
 
 def _retrieve_context_chunks(
@@ -340,4 +377,55 @@ def _score_vectors_locally(
     scored.sort(key=lambda x: x["score"], reverse=True)
     return scored[:top_k]
 
+
+def export_kb_service(kb_uuid: str) -> Optional[Dict[str, Any]]:
+    """
+    Bundle kb metadata, documents, and embeddings into a zip for download.
+    """
+    kb_data = get_kb(kb_uuid)
+    if not kb_data:
+        return None
+
+    docs = _fetch_all_docs(kb_uuid)
+    embeddings = list_doc_embeddings(kb_uuid)
+
+    bundle = {
+        "kb": kb_data,
+        "documents": docs,
+        "embeddings": embeddings,
+        "exported_at": _now_ms(),
+    }
+
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("kb.json", json.dumps(kb_data, ensure_ascii=False, indent=2))
+        zf.writestr("docs.json", json.dumps(docs, ensure_ascii=False))
+        zf.writestr(
+            "embeddings.json",
+            json.dumps(embeddings, ensure_ascii=False),
+        )
+        zf.writestr(
+            "bundle.json",
+            json.dumps(bundle, ensure_ascii=False),
+        )
+
+    memory_file.seek(0)
+    safe_name = re.sub(r"[^a-zA-Z0-9_-]", "-", kb_data.get("name", "kb"))
+    filename = f"{safe_name or 'kb'}-{kb_uuid[:8]}.zip"
+    return {"filename": filename, "content": memory_file.read()}
+
+
+def _fetch_all_docs(kb_uuid: str, page_size: int = 200) -> List[Dict[str, Any]]:
+    docs: List[Dict[str, Any]] = []
+    page = 1
+    total = 0
+    while True:
+        batch = list_docs(kb_uuid, page, page_size)
+        items = batch.get("list", [])
+        total = batch.get("total", 0)
+        docs.extend(items)
+        if len(docs) >= total or not items:
+            break
+        page += 1
+    return docs
 

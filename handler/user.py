@@ -1,6 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from service.user import login_service, password_modify_service, register_service
+
+from service.user import (
+    login_service,
+    password_modify_service,
+    register_service,
+    AuthError,
+)
 from middleware.auth import get_current_user, UserClaim
 
 router = APIRouter()
@@ -8,7 +14,9 @@ router = APIRouter()
 
 class UserLoginRequest(BaseModel):
     """user login request"""
-    username: str
+
+    username: str | None = None
+    identifier: str | None = None
     password: str
 
 
@@ -20,26 +28,36 @@ class PasswordModifyRequest(BaseModel):
 
 class UserRegisterRequest(BaseModel):
     """user register request"""
-    username: str
+
+    username: str | None = None
     password: str
-    email: str | None = None
+    email: str
 
 
 @router.post("/login", tags=["user"])
 async def login(req: UserLoginRequest):
     """user login"""
-    token, error = login_service(req.username, req.password)
-    if error:
-        return {"code": -1, "msg": error}
+    identifier = (req.identifier or req.username or "").strip()
+    try:
+        token = login_service(identifier, req.password)
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.status_code, "msg": exc.message},
+        ) from exc
     return {"code": 200, "data": {"token": token}}
 
 
 @router.post("/register", tags=["user"])
 async def register(req: UserRegisterRequest):
     """user register"""
-    success, error = register_service(req.username, req.password, req.email)
-    if error or not success:
-        return {"code": -1, "msg": error or "register failed"}
+    try:
+        register_service(req.username, req.password, req.email)
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.status_code, "msg": exc.message},
+        ) from exc
     return {"code": 200, "msg": "register success"}
 
 
@@ -49,13 +67,17 @@ async def password_modify(
     current_user: UserClaim = Depends(get_current_user)
 ):
     """password modify"""
-    success, error = password_modify_service(
-        current_user.uuid,
-        current_user.username,
-        req.old_password,
-        req.new_password
-    )
-    if error:
-        return {"code": -1, "msg": error}
+    try:
+        password_modify_service(
+            current_user.uuid,
+            current_user.username,
+            req.old_password,
+            req.new_password
+        )
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.status_code, "msg": exc.message},
+        ) from exc
     return {"code": 200, "msg": "modify success"}
 

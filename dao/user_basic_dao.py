@@ -36,6 +36,21 @@ def search_user_by_username(username: str) -> dict:
     return response
 
 
+def search_user_by_email(email: str) -> dict:
+    """search user by email"""
+    client = get_es_client()
+    _ensure_indices(client)
+    response = client.search(
+        index=USER_BASIC_DAO_INDEX,
+        query={
+            "term": {
+                "email": email
+            }
+        }
+    )
+    return response
+
+
 def search_user_by_uuid(uuid: str) -> dict:
     """search user by uuid"""
     client = get_es_client()

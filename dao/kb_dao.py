@@ -263,3 +263,62 @@ def search_doc_embeddings_by_vector(
     return results
 
 
+def search_docs_fulltext(
+    kb_uuid: str,
+    query: str,
+    top_k: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Perform keyword-based full-text search with highlighting.
+    """
+    client = get_es_client()
+    _ensure_indices(client)
+
+    search_body = {
+        "size": top_k,
+        "query": {
+            "bool": {
+                "filter": [{"term": {"kb_uuid": kb_uuid}}],
+                "must": [
+                    {
+                        "multi_match": {
+                            "query": query,
+                            "fields": ["title^2", "content"],
+                            "type": "best_fields",
+                            "fuzziness": "AUTO",
+                        }
+                    }
+                ],
+            }
+        },
+        "highlight": {
+            "pre_tags": ["<mark>"],
+            "post_tags": ["</mark>"],
+            "fields": {
+                "content": {"fragment_size": 120, "number_of_fragments": 2},
+                "title": {"number_of_fragments": 0},
+            },
+        },
+    }
+
+    res = client.search(index=KB_DOC_INDEX, body=search_body)
+    hits = res.get("hits", {}).get("hits", [])
+    results: List[Dict[str, Any]] = []
+    for hit in hits:
+        source = hit.get("_source", {})
+        highlight = hit.get("highlight", {})
+        snippet_parts = highlight.get("content") or []
+        snippet = "\n".join(snippet_parts) if snippet_parts else source.get("content", "")
+        results.append(
+            {
+                "kb_uuid": source.get("kb_uuid"),
+                "doc_uuid": source.get("uuid"),
+                "title": source.get("title"),
+                "content": source.get("content"),
+                "snippet": snippet,
+                "score": hit.get("_score", 0.0),
+            }
+        )
+    return results
+
+

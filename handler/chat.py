@@ -1,10 +1,16 @@
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 
 from middleware.auth import get_current_user, UserClaim
 from models.chat import ChatCreate, ChatMessageCreate, ChatReply, ChatMessage
 from service import chat as chat_service
+
+
+class ChatUpdateRequest(BaseModel):
+    title: str
+
 
 router = APIRouter(tags=["chat"])
 
@@ -37,6 +43,22 @@ async def delete_chat(
     if not ok:
         raise HTTPException(status_code=404, detail={"code": 404, "msg": "chat not found"})
     return {"code": 200, "msg": "delete success"}
+
+
+@router.put("/chat/{chat_uuid}", summary="update chat title")
+async def update_chat_title(
+    chat_uuid: str,
+    req: ChatUpdateRequest,
+    current_user: UserClaim = Depends(get_current_user),
+) -> Dict[str, Any]:
+    ok = chat_service.update_chat_title_service(
+        current_user.uuid, chat_uuid, req.title
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=404, detail={"code": 404, "msg": "chat not found"}
+        )
+    return {"code": 200, "msg": "update success"}
 
 
 @router.get("/chat/{chat_uuid}/messages", summary="message list", response_model=List[ChatMessage])
